@@ -1,8 +1,8 @@
 muR = 0.1; % average growth rate of risky asset
-sigmaR = 0.5*(1./linspace(0.5,3,100) + 1./linspace(5,0.4,100)); % volatility of risky asset (vector equal in size to time vector)
+sigmaR = 0*(1./linspace(0.5,3,100) + 1./linspace(5,0.4,100)); % volatility of risky asset (vector equal in size to time vector)
 
 muS = 0.02; %average growth rate of safe asset
-sigmaS = 0.003; % volatility of safe asset, we will assume this remains the same
+sigmaS = 0;%0.0015; % volatility of safe asset, we will assume this remains the same
 
 investments = linspace(0.8,0.2,100); %proportion of wealth invested in risky asset at any time
 
