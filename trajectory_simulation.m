@@ -1,17 +1,25 @@
-function [t,X] = trajectory_simulation(mu,sigma,Xzero,t,M)
-    % texit = zeros(M,1);
-    X = zeros(M,length(t));
-    for s = 1:M
-        X(s,1) = Xzero;
-        x = X(s,1);
-        i = 2;
-        while i <= length(t)
-            dt = sqrt(t(i) - t(i-1));
-            sigmaI = (sigma(i) - sigma(i-1))/2;
-            dW = sqrt(dt).*randn;
-            x = x .* exp((mu - 0.5.*sigmaI.^2) .* dt + sigmaI .* dW);
-            X(s,i) = x; % Store the current value of x in the trajectory array
-            i = i + 1; % Increment the index for the next time step
-        end
-    end 
+function [t,S,V] = trajectory_simulation(S0,v0,r,kappa,theta,sigma,rho)
+  
+    % Create Heston model
+    Heston = heston( ...
+        'StartState', [S0 v0], ...
+        'Return', r, ...
+        'Kappa', kappa, ...
+        'Theta', theta, ...
+        'Sigma', sigma, ...
+        'Rho', rho);
+    
+    % Time setup
+    dt = 1/252;
+    T = 1;
+    N = T/dt;
+    nPaths = 1000;
+    
+    % Simulate paths
+    [Paths, t] = simulate(Heston, N, ...
+        'DeltaTime', dt, ...
+        'nTrials', nPaths);
+    
+    S = Paths(:,:,1); % asset paths
+    V = Paths(:,:,2); % variance paths
 end
