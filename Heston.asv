@@ -30,7 +30,7 @@ objectiveFcn = @(Param) Prices(:) - price(finpricer('FFT', 'Model', ...
 	'Kappa', Param(3), 'SigmaV', Param(4), 'RhoSV', Param(5)), ...
 	'SpotPrice', 123.28, 'DiscountCurve', ZeroCurve), Inst);
 
-% Estimate model parameters (using least squares)
+% Estimate model parameters
 options = optimoptions('lsqnonlin', 'FunctionTolerance', 0.0001, ...
 	'Display', 'final', 'PlotFcn', 'optimplotresnorm');
 Param = lsqnonlin(objectiveFcn, [0.1 0.4 0.2 0.6 -0.1], [0 0 0 0 -1], ...
@@ -40,6 +40,7 @@ HestonModel = finmodel('Heston', 'V0', Param(1), 'ThetaV', Param(2), ...
 	'Kappa', Param(3), 'SigmaV', Param(4), 'RhoSV', Param(5))
 
 
+save('heston_params.mat', 'Param')
 
 
 % Calculate implied volatilities for market and model prices
@@ -60,3 +61,12 @@ ylabel('Strike Price')
 zlabel('Implied Volatility')
 hold off
 grid on
+
+
+
+% V = zeros(1, nSteps);
+% V(1) = V0;
+% for t = 2:nSteps
+%     dW = sqrt(dt) * randn;
+%     V(t) = max(V(t-1) + Kappa*(ThetaV - V(t-1))*dt + SigmaV*sqrt(max(V(t-1),0))*dW, 0);
+% end
