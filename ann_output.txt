@@ -1,0 +1,15 @@
+Epoch    0 | ANN: -0.1400 | Analytic: -0.0618 | Loss: 0.1400
+Epoch  100 | ANN: -0.0679 | Analytic: -0.0618 | Loss: 0.0679
+Epoch  200 | ANN: -0.0653 | Analytic: -0.0618 | Loss: 0.0653
+Epoch  300 | ANN: -0.0631 | Analytic: -0.0618 | Loss: 0.0631
+Epoch  400 | ANN: -0.0620 | Analytic: -0.0618 | Loss: 0.0620
+Epoch  500 | ANN: -0.0619 | Analytic: -0.0618 | Loss: 0.0619
+Epoch  600 | ANN: -0.0619 | Analytic: -0.0618 | Loss: 0.0619
+Epoch  700 | ANN: -0.0618 | Analytic: -0.0618 | Loss: 0.0618
+Epoch  800 | ANN: -0.0618 | Analytic: -0.0618 | Loss: 0.0618
+Epoch  900 | ANN: -0.0618 | Analytic: -0.0618 | Loss: 0.0618
+Epoch 1000 | ANN: -0.0618 | Analytic: -0.0618 | Loss: 0.0618
+Epoch 1100 | ANN: -0.0618 | Analytic: -0.0618 | Loss: 0.0618
+Epoch 1200 | ANN: -0.0618 | Analytic: -0.0618 | Loss: 0.0618
+Epoch 1300 | ANN: -0.0617 | Analytic: -0.0618 | Loss: 0.0617
+Epoch 1400 | ANN: -0.0617 | Analytic: -0.0618 | Loss: 0.0617
