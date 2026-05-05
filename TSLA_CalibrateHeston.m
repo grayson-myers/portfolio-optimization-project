@@ -537,3 +537,5 @@ ylabel('Implied Volatility')
 legend('Market IV', 'Model IV')
 title('Heston Fit Quality — Jan 3 2023')
 grid on
+
+save("heston_params_TSLA.mat", 'Param', 'TargetPrices')
