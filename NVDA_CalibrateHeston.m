@@ -249,3 +249,6 @@ ylabel('Implied Volatility')
 legend('Market IV', 'Model IV')
 title('Heston Fit Quality NVDA')
 grid on
+
+
+save("heston_params_NVDA.mat", 'Param', 'TargetPrices')
