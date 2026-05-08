@@ -9,17 +9,17 @@ for k = 1:length(files)
     data1 = [data1; readtable(files(k))];
 end
 
-% Pick a single calibration date — use first date in dataset
-allDates       = datetime(data1.x_QUOTE_DATE_);
-calibDate      = datetime('2023-07-03');   % change this to any date you want
-data1          = data1(allDates == calibDate, :);
+% Pick calibration date
+allDates  = datetime(data1.x_QUOTE_DATE_);
+calibDate = datetime('2013-07-01');
+data1     = data1(allDates == calibDate, :);
 
 fprintf('Calibrating on date: %s\n', string(calibDate));
 fprintf('Number of options on this date: %d\n', height(data1));
 
 Settle    = calibDate;
 SpotPrice = data1.x_UNDERLYING_LAST_(1);
-Rate      = 0.045;
+Rate      = 0.002;   % 2013 low-rate environment
 
 data1.T = data1.x_DTE_ / 365;
 data1   = data1(data1.T > 0, :);
@@ -52,16 +52,14 @@ TargetPrices = Prices(validIdx);
 MATVec       = MAT(validIdx);
 STRVec       = STR(validIdx);
 
-% Tighter filters to get clean, informative options
-minMaturity  = 14/365;   % at least 2 weeks
-maxMaturity  = 1.5;      % drop very long dated (noisy)
-minPrice     = 1.00;     % higher floor — removes near-zero junk
-maxPrice     = SpotPrice * 0.8; % removes deep ITM
+% Filters tuned for QQQ (lower vol, tighter spreads)
+minMaturity  = 14/365;
+maxMaturity  = 1.5;
+minPrice     = 0.25;
+maxPrice     = SpotPrice * 0.6;
 
-
-% Tighter moneyness: 85% to 115% of spot only
-minStrike    = SpotPrice * 0.85;
-maxStrike    = SpotPrice * 1.15;
+minStrike    = SpotPrice * 0.9;
+maxStrike    = SpotPrice * 1.1;
 
 keepFilter = MATVec >= minMaturity  & ...
              MATVec <= maxMaturity  & ...
@@ -76,11 +74,12 @@ STRVec       = STRVec(keepFilter);
 
 fprintf('After moneyness/maturity filter: %d obs\n', length(TargetPrices));
 
-% Convert to IV space
+% Convert to IV
 MarketIVVec = blsimpv(SpotPrice, STRVec, Rate, MATVec, TargetPrices);
 
-% Strict IV bounds — TSLA realistically 30% to 150%
-validIV = ~isnan(MarketIVVec) & MarketIVVec > 0.15 & MarketIVVec < 0.80;
+% IV bounds for QQQ
+validIV = ~isnan(MarketIVVec) & MarketIVVec > 0.05 & MarketIVVec < 0.40;
+
 MarketIVVec  = MarketIVVec(validIV);
 MATVec       = MATVec(validIV);
 STRVec       = STRVec(validIV);
@@ -88,24 +87,23 @@ TargetPrices = TargetPrices(validIV);
 
 fprintf('After IV filter: %d obs\n', length(MarketIVVec));
 fprintf('IV range: %.4f to %.4f\n', min(MarketIVVec), max(MarketIVVec));
-fprintf('MAT range: %.4f to %.4f\n', min(MATVec), max(MATVec));
-fprintf('STR range: %.4f to %.4f\n', min(STRVec), max(STRVec));
 
-% Stratified sampling — only needed if still over 150
+% Stratified sampling
 maxObs = 150;
 if length(TargetPrices) > maxObs
     [~, sortIdx] = sortrows([MATVec, STRVec]);
     step    = floor(length(TargetPrices) / maxObs);
     keepIdx = sortIdx(1:step:end);
     keepIdx = keepIdx(1:min(maxObs, length(keepIdx)));
+
     TargetPrices = TargetPrices(keepIdx);
     MATVec       = MATVec(keepIdx);
     STRVec       = STRVec(keepIdx);
     MarketIVVec  = MarketIVVec(keepIdx);
+
     fprintf('After sampling: %d obs\n', length(MarketIVVec));
 end
 
-% Build ZeroCurve and InstValid AFTER all filtering and sampling
 ZeroCurve = ratecurve("zero", Settle, Settle + years(max(MaturityValues)), Rate);
 
 InstValid = fininstrument('Vanilla', ...
@@ -113,11 +111,10 @@ InstValid = fininstrument('Vanilla', ...
     'Strike', STRVec, ...
     'OptionType', repmat("call", size(STRVec)));
 
-fprintf('InstValid size: %d\n', length(InstValid));
-fprintf('MATVec size: %d\n', length(MATVec));
-
 %% 4. Heston Calibration
-objectiveFcn = @(Param) [MarketIVVec - blsimpv(SpotPrice, STRVec, Rate, MATVec, ...
+
+objectiveFcn = @(Param) [ ...
+    MarketIVVec - blsimpv(SpotPrice, STRVec, Rate, MATVec, ...
     price(finpricer('FFT', ...
         'Model', finmodel('Heston', ...
             'V0',     Param(1), ...
@@ -127,29 +124,15 @@ objectiveFcn = @(Param) [MarketIVVec - blsimpv(SpotPrice, STRVec, Rate, MATVec, 
             'RhoSV',  Param(5)), ...
         'SpotPrice',     SpotPrice, ...
         'DiscountCurve', ZeroCurve), InstValid)); ...
-    100 * max(0, Param(4)^2 - 2*Param(3)*Param(2))];   % Feller penalty
+    100 * max(0, Param(4)^2 - 2*Param(3)*Param(2))];
 
-% Section 4 bounds
-%% 4. Heston Calibration
+% QQQ-specific bounds
+lb = [0.005  0.005  0.5   0.05   -0.95];
+ub = [0.20   0.20   10.0  1.0    -0.1];
 
-% lb = [1e-4   1e-4   0.1   0.05   -0.99];
-% ub = [1.0    1.0    25.0  3.0     0.99];   % free Sigma and Rho completely
-% 
-% startPoints = [0.04   0.04   1.5   0.3   -0.7;
-%                0.10   0.10   3.0   0.6   -0.5;
-%                0.25   0.20   5.0   1.0   -0.3;
-%                0.10   0.08   5.0   0.5   -0.5;   % typical for lower vol stock
-%                0.15   0.10   8.0   0.8   -0.4];
-
-lb = [0.01   1e-4   0.1   0.05   -0.99];  % V0 minimum raised to 0.01
-ub = [1.0    1.0    25.0  3.0     0.99];
-
-startPoints = [0.04   0.04   1.5   0.3   -0.7;
-               0.10   0.10   3.0   0.6   -0.5;
-               0.25   0.20   5.0   1.0   -0.3;
-               0.10   0.08   5.0   0.5   -0.5;
-               0.15   0.10   8.0   0.8   -0.4;
-               0.05   0.25   20.0  1.4   -0.6];  % close to current solution
+startPoints = [0.02   0.02   2.0   0.2   -0.6;
+               0.04   0.03   3.0   0.3   -0.5;
+               0.03   0.02   4.0   0.25  -0.5];
 
 options = optimoptions('lsqnonlin', ...
     'Display',           'iter', ...
@@ -164,6 +147,7 @@ for s = 1:size(startPoints, 1)
     try
         [p, res] = lsqnonlin(objectiveFcn, startPoints(s,:), lb, ub, options);
         fprintf('Residual: %.6f\n', res);
+
         if res < bestResidual
             bestResidual = res;
             bestParam    = p;
@@ -174,15 +158,10 @@ for s = 1:size(startPoints, 1)
 end
 
 Param = bestParam;
+
 fprintf('\nBest parameters:\n');
 fprintf('V0=%.4f  Theta=%.4f  Kappa=%.4f  Sigma=%.4f  Rho=%.4f\n', Param);
-fprintf('Best residual (IV space): %.6f\n', bestResidual);
-
-% Check Feller condition
-feller = 2*Param(3)*Param(2);
-sigSq  = Param(4)^2;
-fprintf('Feller condition: 2*Kappa*Theta=%.4f vs Sigma^2=%.4f  =>  %s\n', ...
-    feller, sigSq, string(feller > sigSq));
+fprintf('Best residual: %.6f\n', bestResidual);
 
 HestonModel = finmodel('Heston', ...
     'V0',     Param(1), ...
@@ -207,23 +186,24 @@ ModelVolVec = blsimpv(SpotPrice, STRVec, Rate, MATVec, ModelPriceVec);
 figure
 surf(TMAT, STR, MKTVOL, 'FaceAlpha', 0.5)
 hold on
-scatter3(MATVec, STRVec, ModelVolVec, 'ro', 'filled')
-xlabel('Time to Maturity (years)')
-ylabel('Strike Price')
-zlabel('Implied Volatility')
-title('NVDA Market vs Heston Fit')
+scatter3(MATVec, STRVec, ModelVolVec, 'r', 'filled')
+xlabel('Time to Maturity')
+ylabel('Strike')
+zlabel('Implied Vol')
+title('QQQ Market vs Heston Fit (2013)')
 grid on
 
 %% 6. Barrier Option Pricing
+
 ExerciseDate = Settle + days(90);
 
 BarrierOpt = fininstrument("Barrier", ...
-    'Strike',        420, ...   % ATM for NVDA July 2023
+    'Strike',        SpotPrice, ...
     'ExerciseDate',  ExerciseDate, ...
     'OptionType',    "call", ...
     'ExerciseStyle', "american", ...
     'BarrierType',   "DO", ...
-    'BarrierValue',  340);      % ~80% of spot
+    'BarrierValue',  SpotPrice * 0.8);
 
 SimDates = Settle:days(1):ExerciseDate;
 
@@ -232,14 +212,13 @@ outPricer = finpricer("AssetMonteCarlo", ...
     'Model',            HestonModel, ...
     'SpotPrice',        SpotPrice, ...
     'SimulationDates',  SimDates, ...
-    'NumTrials',        1000);   % up from default 1000
-     
+    'NumTrials',        200000);
 
 [Price, outPR] = price(outPricer, BarrierOpt, "all");
 
 fprintf('\nBarrier Option Price = %.4f\n', Price);
-disp(outPR.Results);
 
+%% 7. Fit Quality Plot
 figure
 scatter(STRVec, MarketIVVec, 'b', 'filled')
 hold on
@@ -247,8 +226,5 @@ scatter(STRVec, ModelVolVec, 'r', 'filled')
 xlabel('Strike')
 ylabel('Implied Volatility')
 legend('Market IV', 'Model IV')
-title('Heston Fit Quality NVDA')
+title('QQQ Heston Fit Quality (2013)')
 grid on
-
-
-save("heston_params_NVDA.mat", 'Param', 'TargetPrices')
